@@ -1,6 +1,6 @@
 pandapower_RM
 _____________
-Idea to use ReticMaster .rmd files in pandapower.
+Idea to use ReticMasterⓇ .rmd files in pandapower.
 
 This intends to convert `ReticMaster`_ .rmd files to `pandapower`_ networks and run simulations for backfeeding and future network planning purposes.
 
