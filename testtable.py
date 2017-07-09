@@ -9,8 +9,8 @@ import sys
 from datetime import datetime
 from math import sqrt
 
-feeder = 'Witpoortjie'
-directory = '/home/stepper/scripts/python/eskom/MIdrand/CROWTHORNE'
+feeder = ''
+directory = ''
 outfile = feeder + '.csv'
 
 os.chdir(directory)
