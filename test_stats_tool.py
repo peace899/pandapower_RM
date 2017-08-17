@@ -11,6 +11,8 @@ import pandas as pd
 import flask
 import os
 
+from datetime import datetime
+
 """
 open('//HOST/share/path/to/file')
 open(r'\\HOST\share\path\to\file')
@@ -60,12 +62,23 @@ def get_months(dataframe):
     return m_y_choices
     
 def monthly_highs_stats(dataframe):
+    months = []
+    for date in dataframe['DATE'].unique():
+        month_year = datetime.strptime(date, "%Y/%m/%d").strftime('%b %Y')
+        if month_year not in months:
+            months.append(month_year)
     maximums = []
-    months = dataframe['MONTH'].unique()
     for month in months:
-        monthly_max = month, dataframe[dataframe['MONTH'] == month]['kVA'].max()
+        m, y = month.split()
+        monthly_max = (month, 
+                       dataframe[(dataframe['MONTH'] == m) &
+                       (dataframe['DATE'].str.contains(y))]['kVA'].max())
         maximums.append(monthly_max)
-    return maximums        
+    months = [i[0].split()[0] for i in maximums]
+    loads = [i[1] for i in maximums]
+    new_df = dataframe[(dataframe['MONTH'].isin(months) &
+             dataframe['kVA'].isin(loads))]
+    return maximums, new_df       
 
 def daily_highs_stats(dataframe):
     maximums = []
@@ -73,38 +86,53 @@ def daily_highs_stats(dataframe):
     for day in days:
         daily_max = day, dataframe[dataframe['DATE'] == day]['kVA'].max()
         maximums.append(daily_max)
-    return maximums
+    idx = dataframe.groupby(['DATE'])['kVA'].transform(max) == dataframe['kVA']
+    new_df = dataframe[idx]
+    return maximums, new_df
     
 def single_day_stats(dataframe, specific_date):
     hourly_loads = []
     df_day = dataframe[dataframe['DATE'] == specific_date]
     day_times = df_day['DATE_TIME'].to_string(index=False).split('\n')
     for day_time in day_times:
-        hour_load = day_time.split()[1], dataframe.loc[dataframe['DATE_TIME'] == day_time]['kVA'].values[0]
+        hour_load = (day_time.split()[1],
+                     dataframe.loc[dataframe['DATE_TIME'] == day_time]['kVA'].
+                     values[0])
         hourly_loads.append(hour_load)
-    return hourly_loads
+    return hourly_loads, df_day
 
-#def single_month_stats(dataframe, month):
-
+def single_month_stats(dataframe, specific_month):
+    m, y = specific_month.split()
+    df_month = dataframe[(dataframe['MONTH'] == m) &
+               (dataframe['DATE'].str.contains(y))]
     
 def generate_table(dataframe):
     return html.Table([
                 html.Thead([
                     html.Tr([
                        html.Th(col) for col in dataframe.columns],
-                       className="cell")],className="row header",style={'font-size': '95%'}),
+                       className="cell")],
+                       className="row header",
+                       style={'font-size': '95%'}),
                 html.Tbody([
                     html.Tr([
-                        html.Td(dataframe.iloc[i][col]) for col in dataframe.columns
-                        ],className="cell",style={'font-size': '85%'}) for i in range(len(dataframe))],className="row")    
+                        html.Td(
+                        dataframe.iloc[i][col]) for col in dataframe.columns],
+                        className="cell",
+                        style={
+                        'font-size': '85%'}) for i in range(len(dataframe))],
+                        className="row")    
             ],className="table table--fixed")
 
 def generate_graph(dframe):
     y = dframe['kVA'].to_string(index=False).split('\n')
     #x = [i.split()[0] for i in dataframe['DATE_TIME'].to_string(index=False).split('\n')]
     x = dframe['DATE_TIME'].to_string(index=False).split('\n')
-    return html.Div([dcc.Graph(id='my-graph', figure={'data': [{'y': y, 'x': x}]})],
-           style={'width': '800', 'height': '360px', 'float': 'right', 'margin-top': '-425px'})
+    return html.Div([dcc.Graph(id='my-graph',
+                               figure={'data': [{'y': y, 'x': x}]})],
+                               style={'width': '800', 'height': '360px',
+                                      'float': 'right',
+                                      'margin-top': '-425px'})
 
 def graphic_show(dataframe):
     table = generate_table(dataframe)
@@ -125,7 +153,8 @@ app.layout = html.Div([
     html.Div([
         html.Label('Select Substation:'),
         dcc.Dropdown(id='station_dropdown',
-            options=[{'label': k, 'value': k} for k,v in sorted(sub_fdr_combos.items())])]
+            options=[{'label': k,
+                      'value': k} for k,v in sorted(sub_fdr_combos.items())])]
         ,style={'width': '25%', 'float': 'left', 'display': 'inline-block'}),
     html.Div([
         html.Label('Select Feeder/Meter Point:'),
@@ -135,7 +164,8 @@ app.layout = html.Div([
     
     html.Div([
         html.Label('RecorderID:')],
-        style={'position': 'relative', 'left': '80px', 'display': 'inline-block'}),
+        style={'position': 'relative',
+               'left': '80px', 'display': 'inline-block'}),
     
     html.Div([
         dcc.Input(id='display-selected-values')]                      
@@ -143,6 +173,7 @@ app.layout = html.Div([
                  'top': '30px', 'display': 'inline-block'}),
     html.Hr(),
 
+    
     html.Div(id='my-graphic'),
              
       
@@ -157,7 +188,8 @@ app.layout = html.Div([
     dash.dependencies.Output('feeder_dropdown', 'options'),
     [dash.dependencies.Input('station_dropdown', 'value')])
 def set_feeder_options(selected_sub):
-    return [{'label': i[0], 'value': i[0]} for i in sub_fdr_combos[selected_sub]]
+    return [{'label': i[0],
+             'value': i[0]} for i in sub_fdr_combos[selected_sub]]
 
 @app.callback(
     dash.dependencies.Output('feeder_dropdown', 'value'),
