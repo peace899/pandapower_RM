@@ -6,11 +6,11 @@
 import dash
 import dash_core_components as dcc
 import dash_html_components as html
-
+import csv
 import pandas as pd
 import flask
 import os
-
+from cStringIO import StringIO
 from datetime import datetime
 
 """
@@ -21,36 +21,36 @@ open('\\\\HOST\\share\\path\\to\\file')
 #\\ecrfnp01\USERG01\Sharedat\Planning_Central\Planning_Users\Peace
 
 """
-csv_file = r'C:\Users\lekalap\Documents\Personal\scripts\JoburgVaal.csv'
-#Stats data
-#csv_file = r'C:\Users\lekalap\Desktop\stats\allstats.csv'
-#csv_file = r'C:\Users\Peace\Documents\scripts\eskom\MIdrand\CROWTHORNE\Witpoortjie.csv'
-df = pd.read_csv(csv_file)
-# filter results by recorder id
-#df1 = df[df['RECORDER ID'] == 'JBS-1171122760']
-#df1 = '' 
-# filter results by date
-
-#df2 = df1[df['DATE'] == '2016/01/01']
-#y = df2['kVA'].to_string(index=False).split('\n')
-#x = [i.split()[1] for i in df2['DATE_TIME'].to_string(index=False).split('\n')]
-# Substations_feeders list
+data_folder = r'C:\Users\Peace\Documents\Work\GOU STATS\Jorbeg - Vaal\MergedCSVs'
 subs_file = 'subslist.csv'
-df_subs = pd.read_csv(subs_file)
-subs = df_subs['Substation'].tolist()
+
+stats_files = {}
 sub_fdr_combos = {}
-for sub in sorted(list(set(subs))):
-    df_sub = df_subs[df_subs['Substation'] == sub]
-    feeders = df_sub['Location'].to_string(index=False).split('\n')
-    recorders = df_sub['RecorderID'].to_string(index=False).split('\n')
-    combo = [(i,j) for i,j in zip(feeders, recorders)]
-    sub_fdr_combos[sub] = combo
+
+def get_stats_file(data_folder):
+    for f in os.listdir(data_folder):
+        if f.endswith(".csv"):
+            k = str(os.path.splitext(f)[0]).strip()
+            v = os.path.join(data_folder, f)
+            stats_files[k] = v
+ 
+   
+def get_subs_list(subs_file):
+    df_subs = pd.read_csv(subs_file)
+    subs = df_subs['Substation'].tolist()
+    for sub in sorted(list(set(subs))):
+        df_sub = df_subs[df_subs['Substation'] == sub]
+        feeders = df_sub['Location'].to_string(index=False).split('\n')
+        recorders = df_sub['RecorderID'].to_string(index=False).split('\n')
+        combo = [(i,j) for i,j in zip(feeders, recorders)]
+        sub_fdr_combos[sub] = combo
 
 
 def stats_data(recoder_id):
-    # filter results by recorder id
-    df1 = df[df['RECORDER ID'] == recoder_id]
-    return df1
+    
+    csv_file = stats_files[recoder_id]
+    df = pd.read_csv(csv_file)
+    return df
 
 def get_months(dataframe):
     dates = dataframe['DATE'].unique()
@@ -105,6 +105,7 @@ def single_month_stats(dataframe, specific_month):
     m, y = specific_month.split()
     df_month = dataframe[(dataframe['MONTH'] == m) &
                (dataframe['DATE'].str.contains(y))]
+    return df_month
     
 def generate_table(dataframe):
     return html.Table([
@@ -125,9 +126,9 @@ def generate_table(dataframe):
             ],className="table table--fixed")
 
 def generate_graph(dframe):
-    y = dframe['kVA'].to_string(index=False).split('\n')
+    y = dframe['KVA'].astype(int).tolist()
     #x = [i.split()[0] for i in dataframe['DATE_TIME'].to_string(index=False).split('\n')]
-    x = dframe['DATE_TIME'].to_string(index=False).split('\n')
+    x = dframe['DATE_TIME'].tolist()
     return html.Div([dcc.Graph(id='my-graph',
                                figure={'data': [{'y': y, 'x': x}]})],
                                style={'width': '800', 'height': '360px',
@@ -138,7 +139,10 @@ def graphic_show(dataframe):
     table = generate_table(dataframe)
     figure = generate_graph(dataframe)
     return html.Div([table, figure])
-    
+
+get_subs_list(subs_file)
+get_stats_file(data_folder)
+
 app = dash.Dash()
 
 Output = dash.dependencies.Output  
@@ -168,7 +172,18 @@ app.layout = html.Div([
                'left': '80px', 'display': 'inline-block'}),
     
     html.Div([
+        html.Label('File:')],
+        style={'position': 'relative',
+               'left': '90px', 'display': 'inline-block'}),
+    
+    
+    html.Div([
         dcc.Input(id='display-selected-values')]                      
+        ,style={'height': '15px', 'position': 'relative', 'left': '0px',
+                 'top': '30px', 'display': 'inline-block'}),
+    
+     html.Div([
+        dcc.Input(id='display-file')]                      
         ,style={'height': '15px', 'position': 'relative', 'left': '0px',
                  'top': '30px', 'display': 'inline-block'}),
     html.Hr(),
@@ -209,10 +224,17 @@ def set_display_children(selected_sub, selected_feeder):
 
 
 @app.callback(
-    dash.dependencies.Output('my-graphic', 'children'),
+    dash.dependencies.Output('display-file', 'value'),
     [dash.dependencies.Input('display-selected-values', 'value')])
 def set_initial_table(rec_id):
-    df1 = stats_data(rec_id)
+    #df1 = stats_data(str(rec_id).strip())
+    return stats_files[rec_id]
+    
+@app.callback(
+    dash.dependencies.Output('my-graphic', 'children'),
+    [dash.dependencies.Input('display-file', 'value')])
+def set_initial_table(csv_file):
+    df1 = pd.read_csv(csv_file)
     return [graphic_show(df1)]
     #graphic_show(stats_data(rec_id))
     #return df1
@@ -270,8 +292,8 @@ def serve_stylesheet(stylesheet):
 for stylesheet in stylesheets:
     app.css.append_css({"external_url": "/static/{}".format(stylesheet)})
 
-app.config.suppress_callback_exceptions=True
-#app.css.append_css({"external_url": "https://codepen.io/chriddyp/pen/bWLwgP.css"})   
+#app.config.suppress_callback_exceptions=True
+app.css.append_css({"external_url": "https://codepen.io/chriddyp/pen/bWLwgP.css"})   
 #app.css.config.serve_locally = True
 #app.scripts.config.serve_locally = True
 if __name__ == '__main__':
