@@ -128,13 +128,19 @@ def fix_csv(filename, name, err):
                             
                 df.columns = [str(i).strip().upper() for i in df.columns]
                 new_header = ['RECORDER ID', 'DATE', 'HOUR', 'IN', 'UN',
-                              'KW', 'KVAR']   
+                              'KW', 'KVAR_TOTAL']   
                 df2 = df[new_header]
-                dframes.append(df2)
-            
+                df2 = df2.reset_index()
+                df2 = df[new_header]
+                df2.columns = ['RECORDER ID', 'DATE', 'HOUR', 'IN', 'UN',
+                               'KW', 'KVAR']
+                new_name = '{}_{}'.format(name, i)
+                
+                prepare_df(df2, new_name)
+            """
             for frame in dframes:
                 prepare_df(frame, name)
-                
+            """    
                 
 def prepare_df(dfa, name):
     """ Prepare csv dataframe for merging. """
