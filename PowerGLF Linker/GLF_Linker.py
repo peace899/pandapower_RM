@@ -1,20 +1,22 @@
-# Script to link PowerFactory loads to PowerGLF
-# 19/09/2018 1.2 Peace Lekalakala
+# Script to link PowerFactory MV casefile loads to PowerGLF
+# 02/10/2018 1.3 Peace Lekalakala
 import datetime
 import os
 import powerfactory
-import pandas as pd
 import sqlite3
 import sys
 import uuid
 
+from functools import partial
+from fuzzywuzzy import process, fuzz
 from tkinter import *
 from tkinter import filedialog
 from tkinter import ttk
 
+url = 'https://mysites.eskom.co.za/personal/elec_lekalap/Planning/linkedzones/lz_table.aspx'
 
 def GUI():
-
+    
     def get_mv_shape():
         mv_shapefile.set(filedialog.askopenfilename(
                     defaultextension = ".shp",
@@ -27,132 +29,102 @@ def GUI():
     
     def get_glf_file():
         glf_file.set(filedialog.askopenfilename(
-                    defaultextension = ".glf",
-                    filetypes = [('GLF SQLite file', '.glf')]))
+                defaultextension = ".glf",
+                filetypes = [('GLF SQLite file', '.glf')]))
                     
-    def display_choice(event=None):
-        if 'Use SharePoint data' in select.get():
-            # Clear previous
-            canvas = Canvas(master, width=900, height=200)
-            canvas.place(x=2, y=200)
-                        
-            l4 = Label(master, font="Bold", text="UserName:")
-            l4.place(x=2, y=200)
-            e4 = Entry(master, width=50, textvariable=user_name)
-            e4.place(x=2, y=235)
-    
-            l5 = Label(master, font="Bold", text="Password:")
-            l5.place(x=450, y=200)
-            e5 = Entry(master, show="*", width=50)
-            e5.place(x=450, y=235)
-            
-            link = Label(master, text="View SharePoint data", fg="blue", cursor="hand2")
-            link.place(x=2, y=305)
-            link.bind("<Button-1>", open_link)
-        
-        else:
-            canvas = Canvas(master, width=900, height=200)
-            canvas.place(x=2, y=200)
-            
-            l1 = Label(master, font="Bold", text="MV Stations Shapefile:")
-            l1.place(x=2, y=200)
-            e1 = Entry(master, width=100, textvariable=mv_shapefile)
-            e1.place(x=3, y=235)
-            b1 = Button(master, text="Browse...", command=get_mv_shape)
-            b1.place(x=820, y=234)
-    
-            l2 = Label(master, font="Bold", text="GLF GIS Land Use Shapefile:")
-            l2.place(x=2, y=270)
-            e2 = Entry(master, width=100, textvariable=glf_gis_shapefile)
-            e2.place(x=3, y=305)
-            b2 = Button(master, text="Browse...", command=get_landuse_shape)
-            b2.place(x=820, y=304)
-            
     def open_link(event=None):
         import webbrowser
-        webbrowser.open_new(r"https://mysites.eskom.co.za/personal/elec_lekalap/Planning/linkedzones/lz_table.aspx")
-                    
-    def set_values():
-        input_data['MV Stations'] = e1.get()
-        input_data['Load Zones'] = e2.get()
-        input_data['GLF File'] = e3.get()
+        webbrowser.open_new(url)
+        
+    def set_values(method):
+        input_data['MV Stations'] = e2.get()
+        input_data['Load Zones'] = e3.get()
+        input_data['GLF File'] = e1.get()
         input_data['User'] = e4.get()
         input_data['Password'] = e5.get()
-        input_data['Method'] = select.get()
-        input_data['Base Year'] = e6.get()
+        input_data['Method'] = method
+        #input_data['Base Year'] = e6.get()
         
         # Exit gui
-        master.destroy()
+        main.destroy()
         
     def cancel_op():
-        master.destroy()
+        main.destroy()
         sys.exit()
+                    
+                
+    main = Tk()
+    main.title('PowerGLF Linker')
+    main.geometry('900x500')
     
-        
-       
-    master = Tk()
-    master.geometry("900x550")
-    master.title("PowerGLF Linker")
-        
     glf_gis_shapefile = StringVar()
     mv_shapefile = StringVar()
     glf_file = StringVar()
     user_name = StringVar()
     user_name.set(os.getenv('username'))
-    year = StringVar()
-    year.set(int(datetime.datetime.now().year) - 1)
     
-      
-    g_drive = r'\\ecrfnp01\USERG01\Sharedat\Planning_Central\Planning_Users\Peace\glfdata'
-    glf_gis_shapefile.set(os.path.join(g_drive, 'GIS Load Zones.shp'))
-    mv_shapefile.set(os.path.join(g_drive, 'GOU MV STATIONS_052017.shp'))
+    Label(main, font="Bold", text="Select Checked out GLF file:").place(x=20, y=65)
+    e1 = Entry(main, width=95, textvariable=glf_file)
+    e1.place(x=20, y=95)
+    b1 = Button(main, text="Browse...", command=get_glf_file)
+    b1.place(x=805, y=92)
     
-    
-    open_note = "The script requires GIS shapefiles from PowerGLF checkout file"
-    
-    
-    Label(master, text=open_note).place(x=2, y=1)
-    
-    ttk.Separator(master).place(x=1, y=140, relwidth=2)
-    #ttk.Separator(master).place(x=1, y=320, relwidth=2)
-    #ttk.Separator(master).place(x=1, y=400, relwidth=2)
-    e4 = Entry(master, width=50, textvariable=user_name)
-    e5 = Entry(master, show="*", width=50)
-    
-    Label(master, font="Bold", text="Select Checked out GLF file:").place(x=2, y=65)
-    e3 = Entry(master, width=100, textvariable=glf_file)
-    e3.place(x=3, y=95)
-    b3 = Button(master, text="Browse...", command=get_glf_file)
-    b3.place(x=820, y=94)
-    
-    Label(master, text="Select Linking Method:").place(x=2, y=150)
-    select = ttk.Combobox(width=25,value=['Use SharePoint data', 'Use imported shapefiles'])
-    select.set("Use imported shapefiles")
-    select.place(x=180, y=149)  
-    select.bind('<<ComboboxSelected>>', display_choice)
+    # gives weight to the cells in the grid
+    rows = 0
+    while rows < 50:
+        main.rowconfigure(rows, weight=1)
+        main.columnconfigure(rows, weight=1)
+        rows += 1
+ 
+    # Defines and places the notebook widget
+    nb = ttk.Notebook(main)
+    nb.grid(row=18, column=1, columnspan=48, rowspan=30, sticky='NESW')
+ 
+    # Adds tab 1 of the notebook
+    page1 = ttk.Frame(nb)
+    nb.add(page1, text='Use Shapefiles')
+ 
+    # Adds tab 2 of the notebook
+    page2 = ttk.Frame(nb)
+    nb.add(page2, text='Use pre compiled data')
 
-    Label(master, text="Enter Base Year:").place(x=450, y=150)
-    e6 = Entry(master, width=20, textvariable=year)    
-    e6.place(x=580, y=149)
+    Label(page1, font="Bold", text="MV Stations Shapefile:").place(x=10, y=25)
+    e2 = Entry(page1, width=95, textvariable=mv_shapefile)
+    e2.place(x=10, y=60)
+    b2 = Button(page1, text="Browse...", command=get_mv_shape)
+    b2.place(x=795, y=55)
     
-    l1 = Label(master, font="Bold", text="MV Stations Shapefile:")
-    l1.place(x=2, y=200)
-    e1 = Entry(master, width=100, textvariable=mv_shapefile)
-    e1.place(x=3, y=235)
-    b1 = Button(master, text="Browse...", command=get_mv_shape)
-    b1.place(x=820, y=234)
+    Label(page1, font="Bold", text="GLF GIS Land Use Shapefile:").place(x=10, y=100)
+    e3 = Entry(page1, width=95, textvariable=glf_gis_shapefile)
+    e3.place(x=10, y=135)
+    b3 = Button(page1, text="Browse...", command=get_landuse_shape)
+    b3.place(x=795, y=130)
+
+    Button(page1, font="Bold", text="Cancel", width=35, command=cancel_op).place(x=20, y=225)
+    page1_action = partial(set_values, 'Use imported shapefiles')
+    Button(page1, font="Bold", text="Link Loads", width=35, command=page1_action).place(x=455, y=225)
     
-    l2 = Label(master, font="Bold", text="GLF GIS Land Use Shapefile:")
-    l2.place(x=2, y=270)
-    e2 = Entry(master, width=100, textvariable=glf_gis_shapefile)
-    e2.place(x=3, y=305)
-    b2 = Button(master, text="Browse...", command=get_landuse_shape)
-    b2.place(x=820, y=304)   
+    Label(page2, text="Enter your sharepoint login credentials below").place(x=10, y=20)
+    Label(page2, font="Bold", text="UserName:").place(x=10, y=50)
+    e4 = Entry(page2, width=50, textvariable=user_name)
+    e4.place(x=10, y=85)
     
-    Button(master, font="Bold", text="Cancel", width=35, command=cancel_op).place(x=5, y=460)
-    Button(master, font="Bold", text="Link Loads", width=35, command=set_values).place(x=450, y=460)
-        
-    master.mainloop( )
+    Label(page2, font="Bold", text="Password:").place(x=450, y=50)
+    e5 = Entry(page2, show="*", width=50)
+    e5.place(x=450, y=85)
+            
+    link = Label(page2, font="Bold", text="View SharePoint data",
+                 underline=True, fg="blue", cursor="hand2")
+    link.place(x=10, y=140)
+    link.bind("<Button-1>", open_link)
+    
+    Button(page2, font="Bold", text="Cancel", width=35,
+           command=cancel_op).place(x=20, y=225)
+    page2_action = partial(set_values, 'Use SharePoint data')
+    Button(page2, font="Bold", text="Link Loads", width=35,
+           command=page2_action).place(x=455, y=225)
+ 
+    main.mainloop()
     
 
 def get_object_ids(table, object):
@@ -174,16 +146,42 @@ def get_object_ids(table, object):
     
 def get_pf_name(name):
     return str(name).replace('/', ' ').replace('-', ' ')
+
     
- 
-def get_linked_zones(gis_shapefile, mv_shapefile):
+def create_geoframe(shape_file):
+    import shapefile
+    from shapely.geometry import Point
+    import pandas as pd
+    import geopandas as gpd
+    
+    sf = shapefile.Reader(shape_file)
+    shapes = sf.shapes()
+    shape_records = sf.shapeRecords()
+    
+    fields = sf.fields[1:]
+    field_names = [field[0] for field in fields]
+    records = [i.record for i in shape_records]
+    points = [i.points for i in shapes]
+    #print(points)
+    df = pd.DataFrame(records, columns=field_names)
+    
+    geometry = [Point(i[0]) for i in points]
+    crs = {'init': 'epsg:4326'}
+    
+    return gpd.GeoDataFrame(df, geometry=geometry, crs=crs)
+    
+    
+def get_linked_zones(gis_shapefile, mv_shapefile, study_feeders):
     import geopandas as gpd
     
     glf_df = gpd.read_file(gis_shapefile)
-    glf_df = glf_df.to_crs("+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs")
-
-    mv_df = gpd.read_file(mv_shapefile)
-    mv_df = mv_df.to_crs({'init':'epsg:4326'})
+    glf_df = glf_df.to_crs({'init': 'epsg:4326'})
+    
+    try:
+        mv_df = gpd.read_file(mv_shapefile)
+        mv_df = mv_df.to_crs({'init':'epsg:4326'})
+    except ValueError:
+        mv_df = create_geoframe(mv_shapefile)
 
     load_zones_names = connection.execute('select id from {}'.format(load_zones_table))
     load_zones_names = [i[0] for i in load_zones_names.fetchall()]
@@ -194,7 +192,12 @@ def get_linked_zones(gis_shapefile, mv_shapefile):
     # Get corresponding load/transformers zone
     merged_df = gpd.sjoin(mv_df, glf_df, how="left", op="within")
     merged_df['PF Name'] = merged_df.standard_l.apply(lambda x: get_pf_name(x))
-
+    
+    feeder_names = [i for i in list(merged_df['parent_des'].unique())
+                    if 'Feeder' in i]
+    
+    feeders_ = [process.extractOne(i, feeder_names)[0] for i in study_feeders]
+    merged_df = merged_df[merged_df['parent_des'].isin(feeders_)]
     identified_zones = dict(zip(merged_df['PF Name'], merged_df.lob_id))
     
     object_zone_ids = {}
@@ -207,74 +210,162 @@ def get_linked_zones(gis_shapefile, mv_shapefile):
     return object_zone_ids
     
 
-def get_shapepoint_data(username, password):
+def get_sharepoint_data(username, password, study_feeders):
     from requests_ntlm import HttpNtlmAuth
     import requests
+    import pandas as pd
+    import lxml.html as LH
         
-    url = 'https://mysites.eskom.co.za/personal/elec_lekalap/Planning/linkedzones/lz_table.aspx'
     auth = HttpNtlmAuth('elec\\' + username, password)
     html = requests.get(url, auth=auth)
-    html_data = html.text
     app.PrintPlain(html)
-    try:
-        df = pd.read_html(html_data)[0]
-    except ValueError:
-        csv = r'\\ecrfnp01\USERG01\Sharedat\Planning_Central\Planning_Users\Peace\glfdata\zones.csv'
-        df = pd.read_csv(csv, encoding = "ISO-8859-1")
-    df['PF Name'] = df.standard_l.apply(lambda x: get_pf_name(x))
-    object_zone_ids = dict(zip(df['PF Name'], df.lob_fguid))
+    html_data = html.text
     
-    load_names = [i.fold_id.loc_name for i in loads]
-    object_zone_ids = {k: v for k, v in object_zone_ids.items() 
-                       if k in load_names}
-        
+    table = LH.fromstring(html_data)
+    # extract the text from `<td>` tags
+    data = [[elt.text_content() for elt in tr.xpath('td')] 
+            for tr in table.xpath('//tr')]
+    headers = ['Sector', 'CNC', 'Feeder', 'Plant Slot ID', 'Description',
+               'Label', 'Load Zone', 'Subclass', 'Zone ID']
+    df = pd.DataFrame(data, columns=headers)
+    df = df.reindex(df.index.drop(0))
+    app.PrintPlain(df)
+    df['PF Name'] = df['Label'].apply(lambda x: get_pf_name(x))
+    feeder_names = [i for i in list(df.Feeder.unique()) if 'Feeder' in i]
     
+    feeders_ = [process.extractOne(i, feeder_names)[0] for i in study_feeders]
+    df = df[df['Feeder'].isin(feeders_)]
+    object_zone_ids = dict(zip(df['PF Name'], df['Zone ID']))
+    
+                
     return object_zone_ids
     
     
-def get_zone_id(load_name):
-    from fuzzywuzzy import fuzz
+   
+def collect_feeder_zones():
+    feeder_ids = get_object_ids('tb_lob_node', 'fguid')
+    nodes = connection.execute('select id from tb_lob_node').fetchall()
+    nodes = [i[0] for i in nodes]
     
-    name_ratios = [fuzz.ratio(load_name, j) 
-                   for i, j in enumerate(object_zone_ids.keys())]
-    max_value = max(name_ratios)
-    index_ = [i for i, j in enumerate(name_ratios) if j == max_value][0]
-    key = list(object_zone_ids.keys())[index_]
-    return object_zone_ids[key]
+    feeder_zones = {}
+    for i, j in enumerate(nodes):
+        if 'Feeder' in j:
+            feeder_zones[j] = feeder_ids[i]
     
-
-def set_base_year(base_year):
-    connection.execute('UPDATE tb_sys_properties SET baseyear = {}'.fomat(base_year))
+    return feeder_zones
+    
+           
+    
+def get_load_zone(load):
+    app.PrintInfo('Processing: {}'.format(load))
+    load_short_name = load.fold_id.loc_name
+    if load_short_name in object_zone_ids.keys():
+        zone_id = object_zone_ids[load_short_name]
+    else:
+        try:
+            load_sw_name = load.desc[0]
+            feeder, mv_station = str(load_sw_name).split(' Feeder ')[:2]
+            _station = mv_station.split()[0].replace('/', ' ').replace('-', ' ')
+            zone_id = object_zone_ids[_station]
+        except IndexError:
+            load_sw_name = load.fold_id.desc[0]
+            possible_match = process.extractOne(load_sw_name, zone_names)
+            if possible_match[1] >= 70:
+                _station = possible_match[0]
+                zone_id = object_zone_ids[_station]
+            else:
+                zone_id = ''
+        except KeyError:
+            possible_match = process.extractOne(load_short_name, zone_names)
+            if possible_match[1] >= 70:
+                _station = possible_match[0]
+                zone_id = object_zone_ids[_station]
+            else:
+                zone_id = ''
             
+        else:
+            zone_id = ''
     
+    return zone_id
+    
+    
+def get_feeder_zone(load):
+    # As per guideline, assign loads to feeder zones
+    name = load.fold_id.loc_name
+    try:
+        load_sw_name = load.desc[0]
+    except IndexError:
+        load_sw_name = load.fold_id.desc[0]
+    
+    feeder_ = str(load_sw_name).split(' Feeder ')[0]
+    
+    try:
+        feeder = loads_supplying_feeders[feeder_]
+        id = feeder_zones[feeder]
+    except KeyError:
+        feeder = process.extractOne(feeder_, feeder_zones.keys())[0]
+        loads_supplying_feeders[feeder_] = feeder
+        id = feeder_zones[feeder]
+    app.PrintInfo('assigning load: {0} to {1} feeder node'.format(load.loc_name, feeder))
+    return id
+    
+   
     
 def link_loads(loads):
-    loads_data = []
-        
-    for load in loads:
-        load_name = load.GetFullName()
-        load_desc = load.loc_name
-        load_capacity = 0 #load.slini
-        load_short_name = load.fold_id.loc_name
-        try:
-            load_object_zone_id = object_zone_ids[load_short_name]
-        except KeyError:
-            load_object_zone_id = get_zone_id(load_short_name)
-            
-        row_data = (str(uuid.uuid1()), project.loc_name, psa_type, load_name,
-                    load_desc, load_capacity, load_object_zone_id, 1)
-        app.PrintPlain('Linking...: {}'.format(load_name))
-        
-        loads_data.append(row_data)
-        
-      
+    # Link to feeder first
+    loads_data = [('load', project.loc_name, psa_type, i.GetFullName(),
+                   i.loc_name, 0, get_feeder_zone(i), 1) for i in loads]
+       
     # Clean table before insert
     connection.execute('DELETE FROM tb_lob_psaloads')
-        
+    connection.commit()
+    
+    # Create UniqueIDs for fguid with a trigger
+    try:
+        connection.execute("DROP TRIGGER new_uid")
+    except Exception:
+        pass
+            
+    connection.execute('''CREATE TRIGGER new_uid AFTER INSERT ON tb_lob_psaloads
+        FOR EACH ROW
+        WHEN (NEW.fguid IS NOT NULL)
+        BEGIN
+            UPDATE tb_lob_psaloads SET fguid = (select hex( randomblob(4)) || '-' || hex( randomblob(2))
+             || '-' || '4' || substr( hex( randomblob(2)), 2) || '-'
+             || substr('AB89', 1 + (abs(random()) % 4) , 1)  ||
+             substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6)) ) WHERE rowid = NEW.rowid;
+         END;''')
+         
+    
+    # Insert and assign loads to a load object on the database
     connection.executemany( """insert into tb_lob_psaloads
     (fguid, filename, loadtype, loadid, loaddescription, 'loadcapacity',
     'object_fguid', 'cache_state') values (?,?,?,?,?,?,?,?)""", loads_data)
-           
+    connection.commit()
+    
+    
+def assign_to_loadzones():
+    
+    app.PrintInfo('Getting load zones...')
+    
+    # Link loads to respective load zones
+    load_zones_data = []
+    for load in loads:
+        load_zone_id = get_load_zone(load)
+        if load_zone_id:
+            row_data = (load.GetFullName(), load_zone_id)
+            load_zones_data.append(row_data)
+        else:
+            pass
+                
+    # Update loads with their respective load zones     
+    connection.executemany("""UPDATE tb_lob_psaloads 
+        SET object_fguid=? 
+        WHERE loadid=?""", load_zones_data)
+    connection.commit()  
+    
+    # Remove trigger and save
+    connection.execute("DROP TRIGGER new_uid")
     connection.commit()
     
 
@@ -288,14 +379,10 @@ dbfile = input_data['GLF File']
 method = input_data['Method']
 username = input_data['User']
 password = input_data['Password']
-base_year = input_data['Base Year']
+
 
 #Establish SQLite connection to GLF file
 connection = sqlite3.connect(dbfile)
-
-# Set Base Year
-#connection.execute('UPDATE tb_sys_properties SET baseyear = {}'.format(base_year))
-#connection.commit()
 
 # Constatnts
 load_zones_table = 'tb_lob_loadobject'
@@ -306,18 +393,28 @@ psa_type ='PowerFactory'
 app = powerfactory.GetApplication()
 project = app.GetActiveProject()
 
-app.PrintPlain('Collecting loads from Project: {}'.format(project))
+app.PrintInfo('Collecting loads from Project: {}'.format(project))
 loads = app.GetCalcRelevantObjects('*.ElmLod')
 
-if method == 'Use SharePoint data':
-    app.PrintPlain('Downloading data')
-    object_zone_ids = get_shapepoint_data(username, password)
-else:
-    app.PrintPlain('Analysing shapefiles...Please wait')
-    object_zone_ids = get_linked_zones(gis_shapefile, mv_shapefile)
+#Identify all feeder nodes/zones in your PowerGLF file
+feeder_zones = collect_feeder_zones()
+loads_supplying_feeders = {}
 
+# Begin linking all loads to their respective feeder nodes in PowerGLF
 app.PrintPlain('Linking Loads')
 link_loads(loads)
+
+
+study_feeders = loads_supplying_feeders.values()
+if method == 'Use SharePoint data':
+    app.PrintInfo('Downloading load zones data...Please wait')
+    object_zone_ids = get_sharepoint_data(username, password, study_feeders)
+else:
+    app.PrintPlain('Analysing shapefiles...Please wait')
+    object_zone_ids = get_linked_zones(gis_shapefile, mv_shapefile, study_feeders)
+    
+zone_names = list(object_zone_ids.keys())
+assign_to_loadzones()
 
 #Close db connection
 connection.close()
